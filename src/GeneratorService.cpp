@@ -4,7 +4,7 @@ GeneratorService::GeneratorService() {}
 
 JobStatus GeneratorService::StartJob(const JobConfig& config) {
     JobStatus job_status = RegisterNewJob();
-    
+    return {0, ""}; // temp
 }
 
 std::optional<JobStatus> GeneratorService::GetStatus(uint64_t job_id) {
