@@ -26,7 +26,7 @@
 
 **Crazy Printer API** is a high-performance, asynchronous mock log generator written in C++20. It floods your filesystem with gigabytes of hilariously fake log files — on purpose.
 
-It was built as a stress-testing torture device for [LogGrid](https://github.com/MikolajKos/logrid) — a distributed log processing system. If LogGrid can survive Crazy Printer, it can survive anything.
+It was built as a stress-testing torture device for [LogGrid](https://github.com/MikolajKos/LogGrid.git) — a distributed log processing system. If LogGrid can survive Crazy Printer, it can survive anything.
 
 Sample output, for the uninitiated:
 
