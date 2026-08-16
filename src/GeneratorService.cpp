@@ -3,24 +3,24 @@
 GeneratorService::GeneratorService() {}
 
 JobStatus GeneratorService::StartJob(const JobConfig& config) {
-    JobStatus jobStatus = RegisterNewJob();
+    JobStatus job_status = RegisterNewJob();
     
 }
 
-std::optional<JobStatus> GeneratorService::GetStatus(uint64_t jobId) {
-    auto it = m_allJobsStatus.find(jobId);
+std::optional<JobStatus> GeneratorService::GetStatus(uint64_t job_id) {
+    auto it = m_all_jobs_status.find(job_id);
 
-    if (it != m_allJobsStatus.end())
+    if (it != m_all_jobs_status.end())
         return it->second;
 
     return std::nullopt;
 }
 
 JobStatus GeneratorService::RegisterNewJob() {
-    JobStatus newJob;
-    newJob.id = ++m_nextJobId;
-    newJob.status = "running";
+    JobStatus new_job;
+    new_job.id = ++m_next_job_id;
+    new_job.status = "running";
 
-    m_allJobsStatus[newJob.id] = newJob;
-    return newJob;
+    m_all_jobs_status[new_job.id] = new_job;
+    return new_job;
 }
