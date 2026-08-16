@@ -1,5 +1,5 @@
-#ifndef THREAD_SAGE_QUEUE_HPP
-#define THREAD_SAGE_QUEUE_HPP
+#ifndef THREAD_SAFE_QUEUE_HPP
+#define THREAD_SAFE_QUEUE_HPP
 
 #include <concepts>
 #include <condition_variable>
@@ -66,4 +66,4 @@ private:
     bool m_done = false; // producers finished their jobs flag
 };
 
-#endif // THREAD_SAGE_QUEUE_HPP
+#endif // THREAD_SAFE_QUEUE_HPP

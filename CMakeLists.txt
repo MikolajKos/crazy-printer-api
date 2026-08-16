@@ -9,6 +9,7 @@ add_executable(CrazyPrinter
     src/main.cpp
     src/GeneratorService.cpp
     src/PrinterController.cpp
+    src/ThreadPool.cpp
 )
 
 find_package(Threads REQUIRED)
