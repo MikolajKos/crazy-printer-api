@@ -3,10 +3,15 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
+
+#include "ThreadPool.hpp"
+#include "ThreadSafeQueue.hpp"
 
 struct JobStatus {
     uint64_t id;
@@ -14,9 +19,22 @@ struct JobStatus {
 };
 
 struct JobConfig {
-    int file_count = 1;
-    int lines_per_file = 1000;
     std::string output_dir = "tmp/";
+    uint32_t file_count = 10;
+    uint32_t lines_per_file = 10000;
+    uint32_t producer_threads = 4;
+    uint32_t consumer_threads = 4;
+};
+
+struct JobContext {
+    uint64_t id;
+    std::string status;
+
+    ThreadSafeQueue<std::string> queue{256 * 1024 * 1024};
+    std::unique_ptr<ThreadPool> producers;
+    std::unique_ptr<ThreadPool> consumers;
+    std::atomic<uint32_t> files_completed{0};
+    std::atomic<uint32_t> lines_produced{0};
 };
 
 class IGeneratorService {
@@ -38,9 +56,13 @@ public:
 
 private:
     JobStatus RegisterNewJob();
+    void ProducerTask(std::shared_ptr<JobContext> context, JobConfig config);
+    void ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config);
+
 private:
-    std::unordered_map<uint64_t, JobStatus> m_all_jobs_status;
+    std::unordered_map<uint64_t, std::shared_ptr<JobContext>> m_active_jobs;
     std::atomic<uint64_t> m_next_job_id{0};
+    std::mutex m_mutex;
 };
 
 #endif // GENERATOR_SERVICE_HPP

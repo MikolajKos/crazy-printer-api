@@ -52,7 +52,10 @@ public:
     }
 
     void markDone() {
-        m_done = true;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_done = true;
+        }
         m_cv_not_empty.notify_all();
     }
 private:
