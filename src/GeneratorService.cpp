@@ -83,6 +83,42 @@ void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConf
     }
 }
 
-void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config) {
-    // TODO: implementacja Konsumenta
+void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config) {    
+    while (true) {
+        uint32_t lines_written = 0;
+        const uint32_t current_files_completed = context->files_completed.fetch_add(1);
+        
+        if (current_files_completed >= config.file_count)
+            break;
+
+        std::string filename = std::format(
+            "{}/logs_{}_job_id_{}.log",
+            config.output_dir,
+            current_files_completed,
+            context->id
+        );
+
+        std::ofstream file;
+
+        if (std::filesystem::exists(filename))
+            std::filesystem::remove(filename);
+
+        file.open(filename);
+
+        if (!file.is_open())
+            break;
+        
+        while (lines_written < config.lines_per_file) {
+            // Take batch off the queue
+            std::optional<std::string> batch = context->queue.pop();
+
+            if (!batch.has_value())
+                break;
+
+            file << batch.value();
+            lines_written += 
+        }
+
+        file.close();
+    }
 }

@@ -5,11 +5,15 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
 
+#include "LogGenerator.hpp"
 #include "ThreadPool.hpp"
 #include "ThreadSafeQueue.hpp"
 
@@ -30,11 +34,17 @@ struct JobContext {
     uint64_t id;
     std::string status;
 
-    ThreadSafeQueue<std::string> queue{256 * 1024 * 1024};
+    ThreadSafeQueue<Batch> queue{256 * 1024 * 1024};
     std::unique_ptr<ThreadPool> producers;
     std::unique_ptr<ThreadPool> consumers;
     std::atomic<uint32_t> files_completed{0};
     std::atomic<uint32_t> lines_produced{0};
+};
+
+struct Batch {
+    std::string data;
+    uint32_t line_count;
+    size_t size() const { return data.size(); }
 };
 
 class IGeneratorService {
