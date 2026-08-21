@@ -2,7 +2,11 @@
 #define LOG_GENERATOR_HPP
 
 #include <array>
+#include <chrono>
+#include <format>
+#include <random>
 #include <string_view>
+#include <string>
 
 namespace LogGenerator {
     constexpr auto LEVELS = std::to_array<std::string_view>({
@@ -11,7 +15,7 @@ namespace LogGenerator {
         "DEMONIC_POSSESSION",
         "INFO"
     });
-
+    
     constexpr auto MESSAGES = std::to_array<std::string_view>({
         "Printer tray 2 is philosophically empty.",
         "Ink cartridge has achieved enlightenment and refuses to print.",
@@ -48,7 +52,23 @@ namespace LogGenerator {
         "Print queue is currently experiencing a temporal paradox."
     });
 
-    
+    inline std::string GenerateLine(std::string_view timestamp) {
+        thread_local std::mt19937 rng{std::random_device{}()};
+        
+        std::uniform_int_distribution<size_t> lvl_dist(0, LEVELS.size() - 1);
+        std::uniform_int_distribution<size_t> msg_dist(0, MESSAGES.size() - 1);
+
+        const size_t lvl_index = lvl_dist(rng);
+        const size_t msg_index = msg_dist(rng);
+
+        return std::format("[{}] [{}] {}\n", timestamp, LEVELS[lvl_index], MESSAGES[msg_index]);
+    }
+
+    inline std::string GetCurrentTimestamp() {
+        auto now = std::chrono::system_clock::now();
+        auto local_time = std::chrono::current_zone()->to_local(now);
+        return std::format("{:%Y-%m-%d %H:%M:%S}", local_time);
+    }
 }
 
 #endif // LOG_GENERATOR_HPP

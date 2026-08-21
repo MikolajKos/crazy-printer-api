@@ -51,19 +51,35 @@ JobStatus GeneratorService::RegisterNewJob() {
 }
 
 void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConfig config) {
-    uint32_t total_lines_needed = config.file_count * config.lines_per_file;
-    uint32_t batch_size = 10000;
+    const uint32_t total_lines_needed = config.file_count * config.lines_per_file;
+    const uint32_t batch_size = 10000;
 
     while (true) {
-        uint32_t current_size = context->lines_produced.fetch_add(batch_size);
+        const uint32_t current_size = context->lines_produced.fetch_add(batch_size);
 
         if (current_size >= total_lines_needed)
             break;
 
-        uint32_t to_produce = std::min(batch_size, total_lines_needed - current_size);
+        const uint32_t to_produce = std::min(batch_size, total_lines_needed - current_size);
 
         std::string batch;
         batch.reserve(to_produce * 100); // Assuming that each line has about 100 signs
+
+        auto timestamp = LogGenerator::GetCurrentTimestamp();
+        auto last_update = std::chrono::system_clock::now();
+
+        for (uint32_t i = 0; i < to_produce; ++i) {
+            // Update timestamp every 100ms
+            auto now = std::chrono::system_clock::now();
+            if ((now - last_update) >= std::chrono::milliseconds(100)) {
+                timestamp = LogGenerator::GetCurrentTimestamp();
+                last_update = now;
+            }
+
+            batch += LogGenerator::GenerateLine(timestamp);
+        }
+
+        context->queue.push(std::move(batch));
     }
 }
 
