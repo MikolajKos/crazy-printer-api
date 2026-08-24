@@ -37,6 +37,9 @@ struct JobContext {
     ThreadSafeQueue<Batch> queue{256 * 1024 * 1024};
     std::unique_ptr<ThreadPool> producers;
     std::unique_ptr<ThreadPool> consumers;
+
+    std::atomic<uint32_t> active_producers{0};
+
     std::atomic<uint32_t> files_completed{0};
     std::atomic<uint32_t> lines_produced{0};
 };

@@ -11,6 +11,8 @@ JobStatus GeneratorService::StartJob(const JobConfig& config) {
         context = m_active_jobs[job_status.id];
     }
 
+    context->active_producers = config.producer_threads;
+    
     context->producers = std::make_unique<ThreadPool>(
         config.producer_threads,
         [this, context, config]() { ProducerTask(context, config); }
@@ -62,8 +64,8 @@ void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConf
 
         const uint32_t to_produce = std::min(batch_size, total_lines_needed - current_size);
 
-        std::string batch;
-        batch.reserve(to_produce * 100); // Assuming that each line has about 100 signs
+        std::string logs;
+        logs.reserve(to_produce * 100); // Assuming that each line has about 100 signs
 
         auto timestamp = LogGenerator::GetCurrentTimestamp();
         auto last_update = std::chrono::system_clock::now();
@@ -76,11 +78,16 @@ void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConf
                 last_update = now;
             }
 
-            batch += LogGenerator::GenerateLine(timestamp);
+            logs += LogGenerator::GenerateLine(timestamp);
         }
 
-        context->queue.push(std::move(batch));
+        context->queue.push(Batch{ std::move(logs), to_produce });
     }
+
+    // Job done - last producer finished its job, raise 'done' flag, wake up consumers
+    if (context->active_producers.fetch_sub(1) == 1)
+        context->queue.markDone();
+    
 }
 
 void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config) {    
@@ -106,19 +113,25 @@ void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConf
         file.open(filename);
 
         if (!file.is_open())
-            break;
+            continue;
+
+        bool queue_exhausted = false;
         
         while (lines_written < config.lines_per_file) {
             // Take batch off the queue
-            std::optional<std::string> batch = context->queue.pop();
+            std::optional<Batch> batch = context->queue.pop();
 
-            if (!batch.has_value())
+            if (!batch.has_value()) {
+                queue_exhausted = true;
                 break;
+            }
 
-            file << batch.value();
-            lines_written += 
+            file << batch.value().data;
+            lines_written += batch.value().line_count;
         }
 
         file.close();
+
+        if (queue_exhausted) break;
     }
 }

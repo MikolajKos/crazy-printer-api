@@ -48,7 +48,7 @@ public:
         m_current_bytes_in_queue -= item.size();
 
         m_cv_not_full.notify_one();
-        return item;
+        return std::move(item);
     }
 
     void markDone() {
