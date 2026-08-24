@@ -48,11 +48,14 @@ public:
         m_current_bytes_in_queue -= item.size();
 
         m_cv_not_full.notify_one();
-        return item;
+        return std::move(item);
     }
 
     void markDone() {
-        m_done = true;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_done = true;
+        }
         m_cv_not_empty.notify_all();
     }
 private:
