@@ -1,10 +1,13 @@
 #include "GeneratorService.hpp"
 
+#include <spdlog/spdlog.h>
+
 GeneratorService::GeneratorService() {}
 
 JobStatus GeneratorService::StartJob(const JobConfig& config) {
     JobStatus job_status = RegisterNewJob();
 
+    
     // Prepare output catalog
     std::filesystem::remove_all(config.output_dir);
     std::filesystem::create_directories(config.output_dir);
@@ -15,6 +18,9 @@ JobStatus GeneratorService::StartJob(const JobConfig& config) {
         std::lock_guard<std::mutex> lock(m_mutex);
         context = m_active_jobs[job_status.id];
     }
+    
+    // Start execution time clock
+    context->start_time = std::chrono::steady_clock::now();
 
     // Run producers and consumers
     context->active_producers = config.producer_threads;
@@ -48,8 +54,7 @@ std::optional<JobStatus> GeneratorService::GetStatus(uint64_t job_id) {
 }
 
 JobStatus GeneratorService::RegisterNewJob() {
-    auto context = std::make_shared<JobContext>();
-    context->id = ++m_next_job_id;
+    auto context = std::make_shared<JobContext>(++m_next_job_id);
     context->status = "running";
 
     {
@@ -111,7 +116,7 @@ void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConf
 
         if (!file.is_open())
             continue;
-            
+        
         bool queue_exhausted = false;
         
         while (lines_written < config.lines_per_file) {
@@ -131,7 +136,11 @@ void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConf
 
         if (context->files_fully_written.fetch_add(1) == config.file_count - 1) {
             std::lock_guard<std::mutex> lock(m_mutex);
-            context->status = "done";
+            context->MarkAsFinished();
+
+            spdlog::info("Job {} fully completed in {:.3f} s.", 
+                context->id, 
+                context->execution_time_seconds);
         }
         
         if (queue_exhausted) break;

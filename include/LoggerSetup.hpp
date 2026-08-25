@@ -15,7 +15,7 @@ public:
         auto logger = std::make_shared<spdlog::async_logger>(
             "api_logger", console_sink, spdlog::thread_pool(), spdlog::async_overflow_policy::block
         );
-
+        
         spdlog::set_default_logger(logger);
 
         spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [thread %t] %v");
