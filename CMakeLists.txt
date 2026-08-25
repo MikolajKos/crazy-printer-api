@@ -12,11 +12,21 @@ add_executable(CrazyPrinter
     src/ThreadPool.cpp
 )
 
+# Fetch Logger (spdlog)
+include(FetchContent)
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG v1.15.3
+)
+FetchContent_MakeAvailable(spdlog)
+
 find_package(Threads REQUIRED)
 
 target_link_libraries(CrazyPrinter
     PRIVATE
     Threads::Threads
+    spdlog::spdlog
 )
 
 target_include_directories(CrazyPrinter
