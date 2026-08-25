@@ -30,6 +30,12 @@ struct JobConfig {
     uint32_t consumer_threads = 4;
 };
 
+struct Batch {
+    std::string data;
+    uint32_t line_count;
+    size_t size() const { return data.size(); }
+};
+
 struct JobContext {
     uint64_t id;
     std::string status;
@@ -42,12 +48,6 @@ struct JobContext {
 
     std::atomic<uint32_t> files_completed{0};
     std::atomic<uint32_t> lines_produced{0};
-};
-
-struct Batch {
-    std::string data;
-    uint32_t line_count;
-    size_t size() const { return data.size(); }
 };
 
 class IGeneratorService {
