@@ -6,12 +6,13 @@
 #include "ThreadSafeQueue.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
-#include <memory>
-#include <mutex>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -19,7 +20,9 @@
 
 struct JobStatus {
     uint64_t id;
+    std::optional<double> execution_time_seconds;
     std::string status;
+    uint32_t files_written;
 };
 
 struct JobConfig {
@@ -37,18 +40,33 @@ struct Batch {
 };
 
 struct JobContext {
-    uint64_t id;
-    std::string status;
-
     ThreadSafeQueue<Batch> queue{256 * 1024 * 1024};
+    std::chrono::time_point<std::chrono::steady_clock> start_time;
+    double execution_time_seconds = 0.0;
+    uint64_t id;
+    
     std::unique_ptr<ThreadPool> producers;
     std::unique_ptr<ThreadPool> consumers;
+    
+    std::string status;
 
     std::atomic<uint32_t> active_producers{0};
 
     std::atomic<uint32_t> next_file_id{0};
     std::atomic<uint32_t> files_fully_written{0};
     std::atomic<uint32_t> lines_produced{0};
+
+    explicit JobContext(uint64_t job_id)
+        :id(job_id), 
+        start_time(std::chrono::steady_clock::now()) {}
+
+    void MarkAsFinished() {
+        auto end_time = std::chrono::steady_clock::now();
+        std::chrono::duration<double> elapsed = end_time - start_time;
+        execution_time_seconds = elapsed.count();
+
+        status = "done";
+    }
 };
 
 class IGeneratorService {
@@ -72,7 +90,6 @@ private:
     JobStatus RegisterNewJob();
     void ProducerTask(std::shared_ptr<JobContext> context, JobConfig config);
     void ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config);
-
 private:
     std::unordered_map<uint64_t, std::shared_ptr<JobContext>> m_active_jobs;
     

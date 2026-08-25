@@ -44,8 +44,8 @@ void PrinterController::RegisterRoutes(httplib::Server& svr) {
             res.status = 400; // Bad Request
             return;
         }
-        
-        auto status = m_service.GetStatus(job_id);
+
+        const auto status = m_service.GetStatus(job_id);
 
         if (!status.has_value()) {
             res.set_content("Not Found", "text/plain");
@@ -53,7 +53,20 @@ void PrinterController::RegisterRoutes(httplib::Server& svr) {
             return;            
         }
         
-        nlohmann::json response = {{"jobId", status.value().id}, {"status", status.value().status}};
+        const auto& job_status = status.value();
+
+        nlohmann::json response = {
+            {"jobId", job_status.id}, 
+            {"status", job_status.status},
+            {"filesWritten", job_status.files_written}
+        };
+
+        if (job_status.status == "done") {
+            response["metrics"] = {
+                {"executionTimeSeconds", job_status.execution_time_seconds.value()}
+            };
+        }
+
         res.set_content(response.dump(), "application/json");
         res.status = 200; // OK
     });
