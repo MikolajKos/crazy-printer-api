@@ -18,9 +18,6 @@ JobStatus GeneratorService::StartJob(const JobConfig& config) {
         std::lock_guard<std::mutex> lock(m_mutex);
         context = m_active_jobs[job_status.id];
     }
-    
-    // Start execution time clock
-    context->start_time = std::chrono::steady_clock::now();
 
     // Run producers and consumers
     context->active_producers = config.producer_threads;

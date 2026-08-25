@@ -65,8 +65,6 @@ struct JobContext {
         std::chrono::duration<double> elapsed = end_time - start_time;
         execution_time_seconds = elapsed.count();
 
-        
-        
         status = "done";
     }
 };
