@@ -20,7 +20,9 @@
 
 struct JobStatus {
     uint64_t id;
+    std::optional<double> execution_time_seconds;
     std::string status;
+    uint32_t files_written;
 };
 
 struct JobConfig {
@@ -62,7 +64,7 @@ struct JobContext {
         auto end_time = std::chrono::steady_clock::now();
         std::chrono::duration<double> elapsed = end_time - start_time;
         execution_time_seconds = elapsed.count();
-        
+
         
         
         status = "done";

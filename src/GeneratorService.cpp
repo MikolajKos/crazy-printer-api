@@ -42,34 +42,51 @@ std::optional<JobStatus> GeneratorService::GetStatus(uint64_t job_id) {
     std::lock_guard<std::mutex> lock(m_mutex);
     
     // Active/Completed Jobs
-    const auto active_it = m_active_jobs.find(job_id);
+    const auto it = m_active_jobs.find(job_id);
 
-    if (active_it != m_active_jobs.end()) {
-        const auto context = active_it->second;
-        return JobStatus{context->id, context->status};
+    if (it == m_active_jobs.end()) {
+        return std::nullopt;   
+    }
+    
+    const auto context = it->second;
+
+    JobStatus job_status;
+
+    if (context->status == "done") {
+        job_status.execution_time_seconds = context->execution_time_seconds;
     }
 
-    // Not Found
-    return std::nullopt;
+    job_status.id = context->id;
+    job_status.status = context->status;
+    job_status.files_written = context->files_fully_written;
+
+    return job_status;
 }
 
 JobStatus GeneratorService::RegisterNewJob() {
     auto context = std::make_shared<JobContext>(++m_next_job_id);
     context->status = "running";
 
+    spdlog::info("New job received (id: {})", context->id);
+    
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_active_jobs[context->id] = context;
     }
     
-    return JobStatus{context->id, context->status};
+    JobStatus job_status;
+    job_status.id = context->id;
+    job_status.status = context->status;
+    job_status.files_written = 0;
+
+    return job_status;
 }
 
 void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConfig config) {
     const uint32_t total_lines_needed = config.file_count * config.lines_per_file;
     
     // Batch size capped at lines_per_file to prevent a single batch from overflowing one file
-    const uint32_t batch_size = std::min(10000u, config.lines_per_file);
+    const uint32_t batch_size = std::min(100000u, config.lines_per_file);
 
     while (true) {
         const uint32_t current_size = context->lines_produced.fetch_add(batch_size);
