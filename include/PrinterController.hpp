@@ -2,6 +2,7 @@
 #define PRINTER_CONTROLLER_HPP
 
 #include "GeneratorService.hpp"
+
 #include "json.hpp"
 
 namespace httplib { class Server; }

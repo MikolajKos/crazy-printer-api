@@ -1,6 +1,10 @@
 #ifndef GENERATOR_SERVICE_HPP
 #define GENERATOR_SERVICE_HPP
 
+#include "LogGenerator.hpp"
+#include "ThreadPool.hpp"
+#include "ThreadSafeQueue.hpp"
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -12,10 +16,6 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
-
-#include "LogGenerator.hpp"
-#include "ThreadPool.hpp"
-#include "ThreadSafeQueue.hpp"
 
 struct JobStatus {
     uint64_t id;
@@ -46,7 +46,8 @@ struct JobContext {
 
     std::atomic<uint32_t> active_producers{0};
 
-    std::atomic<uint32_t> files_completed{0};
+    std::atomic<uint32_t> next_file_id{0};
+    std::atomic<uint32_t> files_fully_written{0};
     std::atomic<uint32_t> lines_produced{0};
 };
 
@@ -74,6 +75,7 @@ private:
 
 private:
     std::unordered_map<uint64_t, std::shared_ptr<JobContext>> m_active_jobs;
+    
     std::atomic<uint64_t> m_next_job_id{0};
     std::mutex m_mutex;
 };

@@ -14,12 +14,11 @@ void PrinterController::RegisterRoutes(httplib::Server& svr) {
             const auto body = nlohmann::json::parse(req.body);
             
             // Prepare job config
-            config.output_dir = body["outputDir"].get<std::string>();
-            config.file_count = body["fileCount"].get<uint32_t>();
-            config.lines_per_file = body["linesPerFile"].get<uint32_t>();
-            config.producer_threads = body["producerThreads"].get<uint32_t>();
-            config.consumer_threads = body["consumerThreads"].get<uint32_t>();
-            
+            config.output_dir = body.at("outputDir").get<std::string>();
+            config.file_count = body.at("fileCount").get<uint32_t>();
+            config.lines_per_file = body.at("linesPerFile").get<uint32_t>();
+            config.producer_threads = body.at("producerThreads").get<uint32_t>();
+            config.consumer_threads = body.at("consumerThreads").get<uint32_t>();   
         }
         catch (const nlohmann::json::exception& e) {
             res.set_content("Bad Request", "text/plain");

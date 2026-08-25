@@ -1,13 +1,16 @@
-#include "httplib.h"
+#include "GeneratorService.hpp"
 #include "PrinterController.hpp"
 
-int main() {
-    httplib::Server server;
+#include "httplib.h"
 
+int main() {
+    httplib::Server svr;
     GeneratorService service;
     PrinterController controller(service);
 
-    controller.RegisterRoutes(server);
+    controller.RegisterRoutes(svr);
 
+    svr.listen("0.0.0.0", 8080);
+    
     return 0;
 }
