@@ -18,7 +18,7 @@
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: WIP](https://img.shields.io/badge/Status-WIP%20(it's%20alive)-orange.svg)]()
+[![Status: Ready](https://img.shields.io/badge/Status-Ready%20(it's%20alive%20%26%20screaming)-green.svg)]()
 
 ---
 
@@ -144,31 +144,33 @@ crazy-printer-api/
 │   ├── httplib.h             # HTTP server (vendored)
 │   └── json.hpp              # nlohmann/json (vendored)
 ├── include/
-│   ├── IGeneratorService.hpp # Abstract interface (the contract)
-│   ├── GeneratorService.hpp  # Concrete implementation (the chaos)
+│   ├── GeneratorService.hpp  # Interface + concrete implementation + data structs
+│   ├── PrinterController.hpp # HTTP layer (forward decl only, no httplib include)
 │   ├── ThreadPool.hpp        # Reusable thread pool
+│   ├── LogGenerator.hpp      # Log line generator (zero-alloc append)
 │   └── ThreadSafeQueue.hpp   # Byte-limited producer-consumer queue
 └── src/
     ├── main.cpp              # Entry point
-    ├── GeneratorService.cpp
-    ├── PrinterController.cpp # HTTP layer
-    └── ThreadPool.cpp
+    ├── GeneratorService.cpp  # Job lifecycle, producer & consumer tasks
+    ├── PrinterController.cpp # HTTP endpoints
+    └── ThreadPool.cpp        # jthread pool impl
 ```
 
 ---
 
 ## Status
 
-> 🚧 Work in progress. The printer is warming up.
+> ✅ Fully operational. The printer is on fire (intentionally).
 
 - [x] Project structure & CMake setup
-- [x] `IGeneratorService` interface & `GeneratorService` scaffold
-- [x] `ThreadSafeQueue` with byte-based backpressure
+- [x] `ThreadSafeQueue` with byte-based backpressure & `markDone()` wakeup for both sides
 - [x] `ThreadPool` with `std::jthread`
-- [ ] `StartJob` — wire producers & consumers
-- [ ] `PrinterController` — HTTP endpoints
-- [ ] Humorous log content generator
-- [ ] `main.cpp` — start the server
+- [x] `LogGenerator` — zero-allocation line append, `thread_local` RNG & distributions
+- [x] `StartJob` — producers & consumers wired up, output dir prep, atomic file ownership
+- [x] `PrinterController` — `POST /start` and `GET /status/:id` endpoints
+- [x] `main.cpp` — server starts on `0.0.0.0:8080`
+- [x] Data race on `status` field fixed (`m_mutex` guards both read and write)
+- [x] Producer deadlock fixed (`markDone()` now wakes blocked producers too)
 
 ---
 

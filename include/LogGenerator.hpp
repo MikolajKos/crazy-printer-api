@@ -52,22 +52,37 @@ namespace LogGenerator {
         "Print queue is currently experiencing a temporal paradox."
     });
 
-    inline std::string GenerateLine(std::string_view timestamp) {
+    inline void GenerateLine(std::string_view timestamp, std::string& batch) {
         thread_local std::mt19937 rng{std::random_device{}()};
-        
-        std::uniform_int_distribution<size_t> lvl_dist(0, LEVELS.size() - 1);
-        std::uniform_int_distribution<size_t> msg_dist(0, MESSAGES.size() - 1);
+        thread_local static std::uniform_int_distribution<size_t> lvl_dist(0, LEVELS.size() - 1);
+        thread_local static std::uniform_int_distribution<size_t> msg_dist(0, MESSAGES.size() - 1);
 
         const size_t lvl_index = lvl_dist(rng);
         const size_t msg_index = msg_dist(rng);
 
-        return std::format("[{}] [{}] {}\n", timestamp, LEVELS[lvl_index], MESSAGES[msg_index]);
+        // Zero-allocation direct append for maximum performance (bypasses format parsing)
+        batch.append("[");
+        batch.append(timestamp);
+        batch.append("] [");
+        batch.append(LEVELS[lvl_index]);
+        batch.append("] ");
+        batch.append(MESSAGES[msg_index]);
+        batch.append("\n");
     }
 
-    inline std::string GetCurrentTimestamp() {
-        auto now = std::chrono::system_clock::now();
-        auto local_time = std::chrono::current_zone()->to_local(now);
-        return std::format("{:%Y-%m-%d %H:%M:%S}", local_time);
+    // Safe to return string_view because 'buffer' is thread_local and outlives the function scope.
+    inline std::string_view GetCurrentTimestamp() {
+        static const auto* tz = std::chrono::current_zone();
+
+        thread_local std::string buffer;
+        buffer.clear();
+
+        const auto now = std::chrono::system_clock::now();
+        const auto local_time = tz->to_local(now);
+
+        std::format_to(std::back_inserter(buffer), "{:%Y-%m-%d %H:%M:%S}", local_time);
+
+        return buffer;
     }
 }
 

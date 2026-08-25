@@ -5,12 +5,18 @@ GeneratorService::GeneratorService() {}
 JobStatus GeneratorService::StartJob(const JobConfig& config) {
     JobStatus job_status = RegisterNewJob();
 
+    // Prepare output catalog
+    std::filesystem::remove_all(config.output_dir);
+    std::filesystem::create_directories(config.output_dir);
+    
+    // Fetch context
     std::shared_ptr<JobContext> context;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         context = m_active_jobs[job_status.id];
     }
 
+    // Run producers and consumers
     context->active_producers = config.producer_threads;
     
     context->producers = std::make_unique<ThreadPool>(
@@ -29,13 +35,15 @@ JobStatus GeneratorService::StartJob(const JobConfig& config) {
 std::optional<JobStatus> GeneratorService::GetStatus(uint64_t job_id) {
     std::lock_guard<std::mutex> lock(m_mutex);
     
-    auto it = m_active_jobs.find(job_id);
+    // Active/Completed Jobs
+    const auto active_it = m_active_jobs.find(job_id);
 
-    if (it != m_active_jobs.end()) {
-        auto context = it->second;
+    if (active_it != m_active_jobs.end()) {
+        const auto context = active_it->second;
         return JobStatus{context->id, context->status};
     }
 
+    // Not Found
     return std::nullopt;
 }
 
@@ -54,7 +62,9 @@ JobStatus GeneratorService::RegisterNewJob() {
 
 void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConfig config) {
     const uint32_t total_lines_needed = config.file_count * config.lines_per_file;
-    const uint32_t batch_size = 10000;
+    
+    // Batch size capped at lines_per_file to prevent a single batch from overflowing one file
+    const uint32_t batch_size = std::min(10000u, config.lines_per_file);
 
     while (true) {
         const uint32_t current_size = context->lines_produced.fetch_add(batch_size);
@@ -67,18 +77,11 @@ void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConf
         std::string logs;
         logs.reserve(to_produce * 100); // Assuming that each line has about 100 signs
 
-        auto timestamp = LogGenerator::GetCurrentTimestamp();
-        auto last_update = std::chrono::system_clock::now();
-
+        // Get one timestamp for each batch to avoid calling chono in a loop
+        const auto timestamp = LogGenerator::GetCurrentTimestamp();
+        
         for (uint32_t i = 0; i < to_produce; ++i) {
-            // Update timestamp every 100ms
-            auto now = std::chrono::system_clock::now();
-            if ((now - last_update) >= std::chrono::milliseconds(100)) {
-                timestamp = LogGenerator::GetCurrentTimestamp();
-                last_update = now;
-            }
-
-            logs += LogGenerator::GenerateLine(timestamp);
+            LogGenerator::GenerateLine(timestamp, logs);
         }
 
         context->queue.push(Batch{ std::move(logs), to_produce });
@@ -87,38 +90,32 @@ void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConf
     // Job done - last producer finished its job, raise 'done' flag, wake up consumers
     if (context->active_producers.fetch_sub(1) == 1)
         context->queue.markDone();
-    
 }
 
 void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config) {    
     while (true) {
         uint32_t lines_written = 0;
-        const uint32_t current_files_completed = context->files_completed.fetch_add(1);
+        const uint32_t current_file_id = context->next_file_id.fetch_add(1);
         
-        if (current_files_completed >= config.file_count)
+        if (current_file_id >= config.file_count)
             break;
 
         std::string filename = std::format(
             "{}/logs_{}_job_id_{}.log",
             config.output_dir,
-            current_files_completed,
+            current_file_id,
             context->id
         );
 
-        std::ofstream file;
-
-        if (std::filesystem::exists(filename))
-            std::filesystem::remove(filename);
-
-        file.open(filename);
+        std::ofstream file(filename, std::ios::out | std::ios::binary);
 
         if (!file.is_open())
             continue;
-
+            
         bool queue_exhausted = false;
         
         while (lines_written < config.lines_per_file) {
-            // Take batch off the queue
+            // Take single batch off the queue
             std::optional<Batch> batch = context->queue.pop();
 
             if (!batch.has_value()) {
@@ -126,12 +123,17 @@ void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConf
                 break;
             }
 
-            file << batch.value().data;
+            file.write(batch.value().data.data(), batch.value().size());
             lines_written += batch.value().line_count;
         }
 
         file.close();
 
+        if (context->files_fully_written.fetch_add(1) == config.file_count - 1) {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            context->status = "done";
+        }
+        
         if (queue_exhausted) break;
     }
 }

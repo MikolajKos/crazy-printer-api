@@ -24,9 +24,11 @@ public:
         size_t item_size = item.size();
         
         m_cv_not_full.wait(lock, [this, item_size] {
-            return (m_current_bytes_in_queue + item_size) <= m_max_queue_size;
+            return m_done || (m_current_bytes_in_queue + item_size) <= m_max_queue_size;
         });
 
+        if (m_done) return;
+        
         m_queue.push(std::move(item));
         m_current_bytes_in_queue += item_size;
 
@@ -57,6 +59,7 @@ public:
             m_done = true;
         }
         m_cv_not_empty.notify_all();
+        m_cv_not_full.notify_all();
     }
 private:
     std::queue<T> m_queue;
