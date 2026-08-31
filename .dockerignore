@@ -1,0 +1,8 @@
+build/
+.git/
+.vscode/
+.gitignore
+DEV_NOTES.md
+THREADS_APPROACH.md
+README.md
+LICENSE
