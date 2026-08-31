@@ -23,8 +23,8 @@ public:
 
         size_t item_size = item.size();
         
-        m_cv_not_full.wait(lock, [this, item_size] {
-            return m_done || (m_current_bytes_in_queue + item_size) <= m_max_queue_size;
+        m_cv_not_full.wait(lock, [this] {
+            return m_done || m_queue.empty() || m_current_bytes_in_queue < m_max_queue_size;
         });
 
         if (m_done) return;

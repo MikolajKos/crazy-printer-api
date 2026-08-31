@@ -1,6 +1,7 @@
 build/
 .git/
 .vscode/
+logs/
 .gitignore
 DEV_NOTES.md
 THREADS_APPROACH.md
