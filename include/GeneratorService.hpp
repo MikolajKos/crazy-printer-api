@@ -26,7 +26,7 @@ struct JobStatus {
 };
 
 struct JobConfig {
-    std::string output_dir = "tmp/";
+    std::string output_dir = "/data/logs";
     uint32_t file_count = 10;
     uint32_t lines_per_file = 10000;
     uint32_t producer_threads = 4;

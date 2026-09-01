@@ -9,7 +9,6 @@ JobStatus GeneratorService::StartJob(const JobConfig& config) {
 
     
     // Prepare output catalog
-    std::filesystem::remove_all(config.output_dir);
     std::filesystem::create_directories(config.output_dir);
     
     // Fetch context
