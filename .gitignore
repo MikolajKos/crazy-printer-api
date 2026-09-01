@@ -1,7 +1,7 @@
 THREADS_APPROACH.md
 DEV_NOTES.md
 build/
-logs/
+logs/*.log
 
 # Docker
 docker-compose.yaml
@@ -55,6 +55,8 @@ bld/
 [Oo]ut/
 [Ll]og/
 [Ll]ogs/
+!logs/
+!logs/.gitkeep
 
 # Build results on 'Bin' directories
 **/[Bb]in/*

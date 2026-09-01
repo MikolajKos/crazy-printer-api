@@ -27,4 +27,6 @@ COPY --from=builder /usr/src/app/build/CrazyPrinter ./
 
 EXPOSE 8080
 
+USER 1000
+
 CMD ["./CrazyPrinter"]
