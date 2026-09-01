@@ -90,6 +90,10 @@ private:
     JobStatus RegisterNewJob();
     void ProducerTask(std::shared_ptr<JobContext> context, JobConfig config);
     void ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config);
+    size_t FindNthNewLine(std::string_view data, size_t n);
+    std::string CreateFilename(std::string_view dir, const uint32_t file_id, const uint32_t job_id);
+    std::optional<std::ofstream> OpenLogFile(const std::string& filename);
+    void JobTeardown(std::shared_ptr<JobContext> context);
 private:
     std::unordered_map<uint64_t, std::shared_ptr<JobContext>> m_active_jobs;
     

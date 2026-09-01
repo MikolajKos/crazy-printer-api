@@ -105,57 +105,120 @@ void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConf
         context->queue.push(Batch{ std::move(logs), to_produce });
     }
 
-    // Job done - last producer finished its job, raise 'done' flag, wake up consumers
-    if (context->active_producers.fetch_sub(1) == 1)
-        context->queue.markDone();
+    context->active_producers.fetch_sub(1);
 }
 
 void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config) {    
+    // Pass remaining lines to next file in case batch.line_count > lines_needed
+    std::string leftover_data;
+    uint32_t leftover_lines = 0;
+    
     while (true) {
-        uint32_t lines_written = 0;
         const uint32_t current_file_id = context->next_file_id.fetch_add(1);
         
-        if (current_file_id >= config.file_count)
+        if (current_file_id >= config.file_count) {
+            // At the end of thread lifetime return leftovers to the queue
+            if (leftover_lines > 0)
+                context->queue.push(Batch{std::move(leftover_data), leftover_lines});
+            
             break;
+        }
 
-        std::string filename = std::format(
-            "{}/logs_{}_job_id_{}.log",
-            config.output_dir,
-            current_file_id,
-            context->id
-        );
+        std::string filename = CreateFilename(config.output_dir, current_file_id, context->id);
+        std::optional<std::ofstream> opt_file = OpenLogFile(filename);
 
-        std::ofstream file(filename, std::ios::out | std::ios::binary);
-
-        if (!file.is_open())
+        if (!opt_file) {
+            // In case of error treat current file as fully written to avoid incomplete task
+            context->files_fully_written.fetch_add(1);
             continue;
-        
-        bool queue_exhausted = false;
-        
-        while (lines_written < config.lines_per_file) {
-            // Take single batch off the queue
-            std::optional<Batch> batch = context->queue.pop();
+        }
 
-            if (!batch.has_value()) {
+        std::ofstream file = std::move(*opt_file);
+        bool queue_exhausted = false;
+        uint32_t lines_needed = config.lines_per_file;
+
+        auto process_chunk = [&](std::string_view data, uint32_t lines_in_data) {
+            if (lines_needed >= lines_in_data) {
+                file.write(data.data(), data.size());                
+                lines_needed -= lines_in_data;
+                leftover_data.clear();
+
+                leftover_lines = 0;
+            } else { // Edge case: leftover_lines > lines_per_file; Pass lines to another iteration
+                size_t split_pos = FindNthNewLine(data, lines_needed);
+                file.write(data.data(), split_pos);
+                leftover_data = std::string(data.substr(split_pos));
+                leftover_lines = lines_in_data - lines_needed;
+                
+                lines_needed = 0;
+            }
+        };
+        
+        // First write remaining lines
+        if (leftover_lines > 0) {
+            std::string temp_leftovers = std::move(leftover_data);
+            process_chunk(temp_leftovers, leftover_lines);
+        }
+
+        while (lines_needed > 0) {
+            // Take single batch off the queue
+            std::optional<Batch> opt_batch = context->queue.pop();
+
+            if (!opt_batch) {
                 queue_exhausted = true;
                 break;
             }
 
-            file.write(batch.value().data.data(), batch.value().size());
-            lines_written += batch.value().line_count;
+            Batch batch = std::move(*opt_batch);
+            process_chunk(batch.data, batch.line_count);
         }
 
         file.close();
 
-        if (context->files_fully_written.fetch_add(1) == config.file_count - 1) {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            context->MarkAsFinished();
-
-            spdlog::info("Job {} fully completed in {:.3f} s.", 
-                context->id, 
-                context->execution_time_seconds);
-        }
+        if (context->files_fully_written.fetch_add(1) == config.file_count - 1)
+            JobTeardown(context);
         
         if (queue_exhausted) break;
     }
+}
+
+size_t GeneratorService::FindNthNewLine(std::string_view data, size_t n) {
+    size_t pos = 0;
+    for (size_t i = 0; i < n; ++i) {
+        pos = data.find('\n', pos);
+        if (pos == std::string_view::npos) return data.size(); // n less than whole file line count
+        pos++; // next line
+    }
+    return pos;
+}
+
+std::string GeneratorService::CreateFilename(std::string_view dir, const uint32_t file_id, const uint32_t job_id) {
+    return std::format(
+            "{}/logs_{}_job_id_{}.log",
+            dir,
+            file_id,
+            job_id
+    );
+}
+
+std::optional<std::ofstream> GeneratorService::OpenLogFile(const std::string& filename) {
+    std::ofstream file(filename, std::ios::out | std::ios::binary);
+    
+    if (!file.is_open())
+        return std::nullopt;
+
+    return file;
+}
+
+void GeneratorService::JobTeardown(std::shared_ptr<JobContext> context) {
+    {        
+        std::lock_guard<std::mutex> lock(m_mutex);
+        context->MarkAsFinished();
+    }
+
+    context->queue.markDone();
+
+    spdlog::info("Job {} fully completed in {:.3f} s.", 
+        context->id, 
+        context->execution_time_seconds);
 }
