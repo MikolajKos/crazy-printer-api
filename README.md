@@ -102,7 +102,7 @@ Starts an async log generation job. Returns immediately with a job ID — the pr
 {
   "fileCount": 100,
   "linesPerFile": 10000,
-  "outputDir": "tmp/",
+  "outputDir": "/data/logs",
   "producerThreads": 4,
   "consumerThreads": 4
 }
