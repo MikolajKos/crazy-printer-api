@@ -39,6 +39,21 @@ Sample output, for the uninitiated:
 
 ---
 
+## Quick Start
+
+Starting the entire architecture takes only seconds:
+
+1. Clone the repository.
+2. Ensure you have Docker and Docker Compose installed.
+3. Spin up the Crazy Printer using:
+   ```bash
+   docker compose up -d --build
+   ```
+4. To view the live, aggregated output of the printer:
+   ```bash
+   docker compose logs -f
+   ```
+
 ## Architecture
 
 Crazy Printer uses a **Producer-Consumer** pipeline with independent thread pools on both sides:
