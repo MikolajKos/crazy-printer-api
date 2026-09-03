@@ -98,14 +98,13 @@ POST /api/printer/start
 Starts an async log generation job. Returns immediately with a job ID — the printer does not wait for you.
 
 **Request body:**
-
-> Note: In the current version, the "outputDir" field must be set explicitly to "/data/logs" to ensure the generated files are properly saved to the mounted Docker volume. In upcoming updates, this behavior will be improved: the base directory will be handled automatically by the environment, and this field will only be used to define a sub-directory for a specific job (e.g., "outputDir": "job_123").
+> **📝 Note:** The `"outputDir"` field defines a sub-directory within the base logs directory (which is set to `/data/logs` by default via the environment). For example, providing `"outputDir": "job_123"` will automatically save the generated files to `/data/logs/job_123` on the mounted Docker volume.
 
 ```json
 {
   "fileCount": 100,
   "linesPerFile": 10000,
-  "outputDir": "/data/logs",
+  "outputDir": "output",
   "producerThreads": 4,
   "consumerThreads": 4
 }
