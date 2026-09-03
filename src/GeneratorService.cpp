@@ -1,16 +1,26 @@
 #include "GeneratorService.hpp"
 
+#include <cstdlib>
 #include <spdlog/spdlog.h>
 
-GeneratorService::GeneratorService() {}
+GeneratorService::GeneratorService() {
+    const char* base = std::getenv("OUTPUT_BASE_DIR");
+    m_base_dir = base ? base : "/data/logs";
+}
 
 JobStatus GeneratorService::StartJob(const JobConfig& config) {
     JobStatus job_status = RegisterNewJob();
+    
+    // Prepare directory
+    std::filesystem::path rel_dir = MakeRelative(config.output_dir);
+    std::filesystem::path full_path = std::filesystem::path(m_base_dir) / rel_dir;
+    
+    std::error_code ec;
+    std::filesystem::create_directories(full_path, ec);
+    if (ec) {
+        spdlog::error("Could not create directory {}: {}", full_path.string(), ec.message());
+    }
 
-    
-    // Prepare output catalog
-    std::filesystem::create_directories(config.output_dir);
-    
     // Fetch context
     std::shared_ptr<JobContext> context;
     {
@@ -129,7 +139,10 @@ void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConf
 
         if (!opt_file) {
             // In case of error treat current file as fully written to avoid incomplete task
-            context->files_fully_written.fetch_add(1);
+            if (context->files_fully_written.fetch_add(1) == config.file_count - 1) {
+                JobTeardown(context);
+                break;
+            }
             continue;
         }
 
@@ -175,8 +188,10 @@ void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConf
 
         file.close();
 
-        if (context->files_fully_written.fetch_add(1) == config.file_count - 1)
+        if (context->files_fully_written.fetch_add(1) == config.file_count - 1) {
             JobTeardown(context);
+            break;
+        }
         
         if (queue_exhausted) break;
     }
@@ -192,10 +207,13 @@ size_t GeneratorService::FindNthNewLine(std::string_view data, size_t n) {
     return pos;
 }
 
-std::string GeneratorService::CreateFilename(std::string_view dir, const uint32_t file_id, const uint32_t job_id) {
+std::string GeneratorService::CreateFilename(std::string_view dir, const uint32_t file_id, const uint64_t job_id) {
+    // Prepare directory
+    std::filesystem::path final_dir = std::filesystem::path(m_base_dir) / dir;
+    
     return std::format(
             "{}/logs_{}_job_id_{}.log",
-            dir,
+            final_dir.string(),
             file_id,
             job_id
     );
@@ -221,4 +239,11 @@ void GeneratorService::JobTeardown(std::shared_ptr<JobContext> context) {
     spdlog::info("Job {} fully completed in {:.3f} s.", 
         context->id, 
         context->execution_time_seconds);
+}
+
+std::filesystem::path GeneratorService::MakeRelative(std::string_view p) {
+    while (!p.empty() && (p.front() == '/' || p.front() == '\\')) {
+        p.remove_prefix(1);
+    }
+    return p.empty() ? std::filesystem::path(".") : std::filesystem::path(p);
 }

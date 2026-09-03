@@ -26,7 +26,7 @@ struct JobStatus {
 };
 
 struct JobConfig {
-    std::string output_dir = "/data/logs";
+    std::string output_dir = "/tmp";
     uint32_t file_count = 10;
     uint32_t lines_per_file = 10000;
     uint32_t producer_threads = 4;
@@ -91,14 +91,16 @@ private:
     void ProducerTask(std::shared_ptr<JobContext> context, JobConfig config);
     void ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config);
     size_t FindNthNewLine(std::string_view data, size_t n);
-    std::string CreateFilename(std::string_view dir, const uint32_t file_id, const uint32_t job_id);
+    std::string CreateFilename(std::string_view dir, const uint32_t file_id, const uint64_t job_id);
     std::optional<std::ofstream> OpenLogFile(const std::string& filename);
     void JobTeardown(std::shared_ptr<JobContext> context);
+    static std::filesystem::path MakeRelative(std::string_view p);
 private:
     std::unordered_map<uint64_t, std::shared_ptr<JobContext>> m_active_jobs;
     
     std::atomic<uint64_t> m_next_job_id{0};
     std::mutex m_mutex;
+    std::string m_base_dir;
 };
 
 #endif // GENERATOR_SERVICE_HPP

@@ -4,5 +4,7 @@ services:
     image: crazy-printer
     ports:
       - "8080:8080"
+    environment:
+      - OUTPUT_BASE_DIR=/data/logs/
     volumes:
-      - "./logs:/data/logs"
+      - "/data/logs:/data/logs"
