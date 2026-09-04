@@ -42,6 +42,48 @@ Sample output, for the uninitiated:
 
 ---
 
+## 📊 Benchmark
+
+> Tested on RAM disk (`--tmpfs`) to isolate CPU performance from storage limits.
+> **100 files × 100,000 lines ≈ 953 MB** per run.
+
+**Run it yourself:**
+```bash
+# Start the server with RAM disk (no storage bottleneck)
+docker run -d --rm \
+  --name crazy-printer \
+  -p 8080:8080 \
+  -e OUTPUT_BASE_DIR=/data/logs/ \
+  --tmpfs /data/logs \
+  ghcr.io/mikolajkos/crazy-printer-api:v1.0.0
+
+# Run benchmark
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r benchmark/requirements.txt
+python3 benchmark/run_benchmark.py
+```
+
+![Benchmark Results](benchmark/benchmark_results.png)
+
+| Configuration | Throughput |
+|---|---|
+| 1P / 1C | 3,179 MB/s |
+| **2P / 2C** | **5,398 MB/s** ⬅ peak |
+| 4P / 4C | 5,247 MB/s |
+| 8P / 2C | 4,817 MB/s |
+| 8P / 8C | 4,337 MB/s |
+
+**Key observations:**
+- Peak throughput of **5.4 GB/s** saturates virtually any consumer SSD or HDD — at this point the bottleneck is the storage device, not the generator
+- Sweet spot is **2P / 2C** — diminishing returns beyond that as CPU contention on string generation and RNG starts to dominate
+- **8P / 8C** drops vs 2P / 2C — too many threads competing for the same CPU cores
+- Even the slowest config (**1P / 1C** at 3.2 GB/s) exceeds the sequential write speed of most NVMe drives
+
+> 💡 **Tuning tip:** for HDD use `consumerThreads: 1` to avoid head thrashing. For NVMe: `2P / 2C` or `4P / 4C`.
+
+---
+
 ## Quick Start
 
 Requires Docker and Docker Compose.
