@@ -181,7 +181,7 @@ Returns the current status of a job.
 # Release
 docker compose up -d --build
 
-# Debug — full structured log output (DEBUG + TRACE)
+# Debug — full structured log output
 BUILD_TYPE=Debug docker compose up -d --build
 
 # Debug + AddressSanitizer
