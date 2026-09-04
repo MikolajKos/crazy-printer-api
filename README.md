@@ -34,9 +34,9 @@ It was built as a stress-testing torture device for [LogGrid](https://github.com
 Sample output, for the uninitiated:
 
 ```
-[2026-08-16 03:14:15] [WARN]  Printer tray 2 is philosophically empty
-[2026-08-16 03:14:16] [ERROR] Ink cartridge has achieved enlightenment and refuses to print
-[2026-08-16 03:14:17] [FATAL] DEMONIC_POSSESSION detected in spooler process
+[2026-08-16 03:14:15] [WARN]  Printer tray 2 is philosophically empty.
+[2026-08-16 03:14:16] [ERROR] Ink cartridge has achieved enlightenment and refuses to print.
+[2026-08-16 03:14:17] [DEMONIC_POSSESSION] Firmware corrupted by ancient Sumerian curse. Please consult an exorcist.
 [2026-08-16 03:14:18] [INFO]  Restarting printer... (attempt 666 of ∞)
 ```
 
@@ -44,18 +44,29 @@ Sample output, for the uninitiated:
 
 ## Quick Start
 
-Starting the entire architecture takes only seconds:
+Requires Docker and Docker Compose.
 
-1. Clone the repository.
-2. Ensure you have Docker and Docker Compose installed.
-3. Spin up the Crazy Printer using:
-   ```bash
-   docker compose up -d --build
-   ```
-4. To view the live, aggregated output of the printer:
-   ```bash
-   docker compose logs -f
-   ```
+```bash
+# Clone and start (Release build)
+git clone https://github.com/MikolajKos/crazy-printer-api.git
+cd crazy-printer-api
+docker compose up -d --build
+
+# Watch live logs
+docker compose logs -f
+```
+
+```bash
+# Start a print job
+curl -X POST http://localhost:8080/api/printer/start \
+  -H "Content-Type: application/json" \
+  -d '{"fileCount": 100, "linesPerFile": 10000, "outputDir": "job_1", "producerThreads": 4, "consumerThreads": 4}'
+
+# Check job status
+curl http://localhost:8080/api/printer/status/1
+```
+
+---
 
 ## Architecture
 
@@ -67,9 +78,10 @@ POST /api/printer/start
          ▼
  GeneratorService::StartJob(config)
          │
-         ├─► [Producer Pool]  →  generates text batches  →  [ThreadSafeQueue]
+         ├─► [Producer Pool]  →  generates text batches  →  [ThreadSafeQueue 256MB]
          │                                                          │
          └─► [Consumer Pool]  ←──────────────────────────  pops batches, writes to disk
+                                    (Exclusive File Ownership — zero I/O locking)
 ```
 
 ### Key design decisions
@@ -79,18 +91,22 @@ POST /api/printer/start
 - **Exclusive file ownership** — each consumer thread owns its file exclusively. Zero file-level locking, zero disk thrashing.
 - **Configurable thread counts** — tune `producerThreads` and `consumerThreads` independently for your hardware (HDD vs NVMe).
 - **Dependency Injection** — `PrinterController` depends on `IGeneratorService`, not the concrete implementation. Testable by design.
+- **Zero-alloc log generation** — `LogGenerator::GenerateLine` appends directly into a pre-reserved `std::string` batch. No per-line allocations at ~40M lines.
+- **Atomic work distribution** — producers and consumers claim work via `fetch_add` on shared atomics. No scheduler, no mutex on the hot path.
 
 ---
 
 ## Stack
 
-| Component | Technology |
+| Component  | Technology |
 |---|---|
-| Language | C++20 |
-| HTTP Server | [yhirose/cpp-httplib](https://github.com/yhirose/cpp-httplib) |
-| JSON | [nlohmann/json](https://github.com/nlohmann/json) |
-| Build | CMake 3.25+ |
-| Threads | `std::jthread`, `std::mutex`, `std::condition_variable`, `std::atomic` |
+| Language   | C++20 |
+| HTTP Server | [yhirose/cpp-httplib](https://github.com/yhirose/cpp-httplib) (vendored) |
+| JSON       | [nlohmann/json](https://github.com/nlohmann/json) (vendored) |
+| Logging    | [spdlog](https://github.com/gabime/spdlog) v1.15.3 — async, structured, color |
+| Build      | CMake 3.25+ |
+| Threads    | `std::jthread`, `std::mutex`, `std::condition_variable`, `std::atomic` |
+| Container  | Docker + Docker Compose |
 
 ---
 
@@ -101,13 +117,13 @@ POST /api/printer/start
 Starts an async log generation job. Returns immediately with a job ID — the printer does not wait for you.
 
 **Request body:**
-> **📝 Note:** The `"outputDir"` field defines a sub-directory within the base logs directory (which is set to `/data/logs` by default via the environment). For example, providing `"outputDir": "job_123"` will automatically save the generated files to `/data/logs/job_123` on the mounted Docker volume.
+> **📝 Note:** `"outputDir"` is a sub-directory within the base logs directory (`/data/logs` by default, set via `OUTPUT_BASE_DIR` env). Providing `"outputDir": "job_1"` saves files to `/data/logs/job_1` on the mounted Docker volume. Leading slashes are stripped automatically.
 
 ```json
 {
   "fileCount": 100,
   "linesPerFile": 10000,
-  "outputDir": "output",
+  "outputDir": "job_1",
   "producerThreads": 4,
   "consumerThreads": 4
 }
@@ -116,7 +132,7 @@ Starts an async log generation job. Returns immediately with a job ID — the pr
 **Response `202 Accepted`:**
 ```json
 {
-  "jobId": 42,
+  "jobId": 1,
   "status": "running"
 }
 ```
@@ -127,11 +143,24 @@ Starts an async log generation job. Returns immediately with a job ID — the pr
 
 Returns the current status of a job.
 
-**Response `200 OK`:**
+**Response `200 OK` — job in progress:**
 ```json
 {
-  "jobId": 42,
-  "status": "running"
+  "jobId": 1,
+  "status": "running",
+  "filesWritten": 42
+}
+```
+
+**Response `200 OK` — job completed:**
+```json
+{
+  "jobId": 1,
+  "status": "done",
+  "filesWritten": 100,
+  "metrics": {
+    "executionTimeSeconds": 12.345
+  }
 }
 ```
 
@@ -146,13 +175,31 @@ Returns the current status of a job.
 
 ## Building
 
+### Docker (recommended)
+
 ```bash
-cmake -S . -B build
+# Release
+docker compose up -d --build
+
+# Debug — full structured log output (DEBUG + TRACE)
+BUILD_TYPE=Debug docker compose up -d --build
+
+# Debug + AddressSanitizer
+BUILD_TYPE=Debug SAN_TYPE=ASAN docker compose up -d --build
+
+# Debug + ThreadSanitizer
+BUILD_TYPE=Debug SAN_TYPE=TSAN docker compose up -d --build
+```
+
+### Local
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ./build/CrazyPrinter
 ```
 
-Requires a C++20-capable compiler (GCC 12+, Clang 14+).
+Requires a C++20-capable compiler (GCC 12+, Clang 14+) and internet access (CMake fetches spdlog via FetchContent).
 
 ---
 
@@ -162,17 +209,18 @@ Requires a C++20-capable compiler (GCC 12+, Clang 14+).
 crazy-printer-api/
 ├── external/
 │   ├── httplib.h             # HTTP server (vendored)
-│   └── json.hpp              # nlohmann/json (vendored)
+│   └── json.hpp              # nlohmann/json v3.11.3 (vendored)
 ├── include/
-│   ├── GeneratorService.hpp  # Interface + concrete implementation + data structs
+│   ├── GeneratorService.hpp  # Interface + concrete impl + data structs (JobConfig, JobContext, Batch)
+│   ├── LogGenerator.hpp      # Log line generator — zero-alloc append, thread_local RNG
+│   ├── LoggerSetup.hpp       # spdlog async init, runtime level binding, ASCII welcome screen
 │   ├── PrinterController.hpp # HTTP layer (forward decl only, no httplib include)
-│   ├── ThreadPool.hpp        # Reusable thread pool
-│   ├── LogGenerator.hpp      # Log line generator (zero-alloc append)
-│   └── ThreadSafeQueue.hpp   # Byte-limited producer-consumer queue
+│   ├── ThreadPool.hpp        # Reusable jthread pool
+│   └── ThreadSafeQueue.hpp   # Byte-limited producer-consumer queue (concept-constrained template)
 └── src/
-    ├── main.cpp              # Entry point
-    ├── GeneratorService.cpp  # Job lifecycle, producer & consumer tasks
-    ├── PrinterController.cpp # HTTP endpoints
+    ├── main.cpp              # Entry point — logger init, server start on 0.0.0.0:8080
+    ├── GeneratorService.cpp  # Job lifecycle, producer & consumer tasks, I/O helpers
+    ├── PrinterController.cpp # HTTP endpoints with structured request/response logging
     └── ThreadPool.cpp        # jthread pool impl
 ```
 
@@ -182,15 +230,19 @@ crazy-printer-api/
 
 > ✅ Fully operational. The printer is on fire (intentionally).
 
-- [x] Project structure & CMake setup
-- [x] `ThreadSafeQueue` with byte-based backpressure & `markDone()` wakeup for both sides
+- [x] Project structure & CMake setup (Release/Debug, ASAN/TSAN sanitizers)
+- [x] `ThreadSafeQueue` — byte-based backpressure, dual CV, `markDone()` wakes both sides
 - [x] `ThreadPool` with `std::jthread`
-- [x] `LogGenerator` — zero-allocation line append, `thread_local` RNG & distributions
-- [x] `StartJob` — producers & consumers wired up, output dir prep, atomic file ownership
-- [x] `PrinterController` — `POST /start` and `GET /status/:id` endpoints
+- [x] `LogGenerator` — zero-allocation line append, `thread_local` RNG & distributions, single timestamp per batch
+- [x] `StartJob` — producers & consumers wired up, output dir prep, atomic file & line ownership
+- [x] `PrinterController` — `POST /start` and `GET /status/:id` with latency logging
 - [x] `main.cpp` — server starts on `0.0.0.0:8080`
-- [x] Data race on `status` field fixed (`m_mutex` guards both read and write)
+- [x] Data race on `status` field fixed (`m_mutex` guards both read and write via `MarkAsFinished()`)
 - [x] Producer deadlock fixed (`markDone()` now wakes blocked producers too)
+- [x] Structured logging via `spdlog` — async, color, configurable level per build type
+- [x] Configurable Docker build types — `BUILD_TYPE=Debug|Release`, `SAN_TYPE=ASAN|TSAN`
+- [x] `filesWritten` counter in `GET /status` response (both `running` and `done`)
+- [x] `metrics.executionTimeSeconds` in `GET /status` response when `done`
 
 ---
 
