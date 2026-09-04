@@ -6,6 +6,9 @@
 GeneratorService::GeneratorService() {
     const char* base = std::getenv("OUTPUT_BASE_DIR");
     m_base_dir = base ? base : "/data/logs";
+
+    // Warm up time_zone lazy init before any producer threads start (TSAN printed data race before change)
+    std::chrono::current_zone()->to_local(std::chrono::system_clock::now());
 }
 
 JobStatus GeneratorService::StartJob(const JobConfig& config) {

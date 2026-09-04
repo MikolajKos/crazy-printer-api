@@ -13,3 +13,5 @@ services:
       - OUTPUT_BASE_DIR=/data/logs/
     volumes:
       - "/data/logs:/data/logs"
+    security_opt:
+      - seccomp=unconfined
