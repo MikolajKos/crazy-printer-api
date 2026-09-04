@@ -17,6 +17,9 @@
 > *"Because generating 2 Terabytes of fake logs shouldn't be boring."*
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
+[![cpp-httplib](https://img.shields.io/badge/cpp--httplib-00599C?logo=c%2B%2B&logoColor=fff)](https://github.com/yhirose/cpp-httplib)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=fff)](https://www.docker.com/)
+[![CMake](https://img.shields.io/badge/CMake-064F8C?logo=cmake&logoColor=fff)](https://cmake.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Status: Ready](https://img.shields.io/badge/Status-Ready%20(it's%20alive%20%26%20screaming)-green.svg)]()
 
