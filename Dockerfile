@@ -16,7 +16,13 @@ COPY CMakeLists.txt .
 COPY src/ src/
 COPY include/ include/
 COPY external/ external/
-RUN mkdir build && cd build && cmake .. -G "Ninja"
+
+# Release or Debug
+ARG BUILD_TYPE=Release
+# Sanitizers
+ARG SAN_TYPE=""
+
+RUN mkdir build && cd build && cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_SAN_TYPE=${SAN_TYPE}
 RUN cd build && ninja
 
 # ================================================

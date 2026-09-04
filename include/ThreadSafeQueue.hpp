@@ -8,6 +8,7 @@
 #include <optional>
 #include <queue>
 #include <string>
+#include <spdlog/spdlog.h>
 
 template<typename T>
 requires requires(T a) {
@@ -58,6 +59,9 @@ public:
             std::lock_guard<std::mutex> lock(m_mutex);
             m_done = true;
         }
+
+        SPDLOG_DEBUG("Queue marked as done - Bytes in queue: {}", m_current_bytes_in_queue);
+
         m_cv_not_empty.notify_all();
         m_cv_not_full.notify_all();
     }
