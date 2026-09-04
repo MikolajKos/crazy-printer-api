@@ -18,7 +18,8 @@ JobStatus GeneratorService::StartJob(const JobConfig& config) {
     std::error_code ec;
     std::filesystem::create_directories(full_path, ec);
     if (ec) {
-        spdlog::error("Could not create directory {}: {}", full_path.string(), ec.message());
+        spdlog::critical("Could not create directory {}: {}", full_path.string(), ec.message());
+        return JobStatus{};
     }
 
     // Fetch context
@@ -27,15 +28,13 @@ JobStatus GeneratorService::StartJob(const JobConfig& config) {
         std::lock_guard<std::mutex> lock(m_mutex);
         context = m_active_jobs[job_status.id];
     }
-
-    // Run producers and consumers
-    context->active_producers = config.producer_threads;
     
+    // Run producers and consumers
     context->producers = std::make_unique<ThreadPool>(
         config.producer_threads,
         [this, context, config]() { ProducerTask(context, config); }
     );
-
+    
     context->consumers = std::make_unique<ThreadPool>(
         config.consumer_threads,
         [this, context, config]() { ConsumerTask(context, config); }
@@ -49,19 +48,19 @@ std::optional<JobStatus> GeneratorService::GetStatus(uint64_t job_id) {
     
     // Active/Completed Jobs
     const auto it = m_active_jobs.find(job_id);
-
+    
     if (it == m_active_jobs.end()) {
         return std::nullopt;   
     }
     
     const auto context = it->second;
-
+    
     JobStatus job_status;
-
+    
     if (context->status == "done") {
         job_status.execution_time_seconds = context->execution_time_seconds;
     }
-
+    
     job_status.id = context->id;
     job_status.status = context->status;
     job_status.files_written = context->files_fully_written;
@@ -72,7 +71,7 @@ std::optional<JobStatus> GeneratorService::GetStatus(uint64_t job_id) {
 JobStatus GeneratorService::RegisterNewJob() {
     auto context = std::make_shared<JobContext>(++m_next_job_id);
     context->status = "running";
-
+    
     spdlog::info("New job received (id: {})", context->id);
     
     {
@@ -89,10 +88,13 @@ JobStatus GeneratorService::RegisterNewJob() {
 }
 
 void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConfig config) {
+    
     const uint32_t total_lines_needed = config.file_count * config.lines_per_file;
     
     // Batch size capped at lines_per_file to prevent a single batch from overflowing one file
     const uint32_t batch_size = std::min(100000u, config.lines_per_file);
+    
+    SPDLOG_DEBUG("Producer Thread Created - Task Starded - Job ID: {} - Batch Size: {}", context->id, batch_size);
 
     while (true) {
         const uint32_t current_size = context->lines_produced.fetch_add(batch_size);
@@ -115,10 +117,12 @@ void GeneratorService::ProducerTask(std::shared_ptr<JobContext> context, JobConf
         context->queue.push(Batch{ std::move(logs), to_produce });
     }
 
-    context->active_producers.fetch_sub(1);
+    SPDLOG_DEBUG("Producer Thread - Shutdown - Job ID: {} - Lines produced: {}", context->id, context->lines_produced.load());
 }
 
 void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConfig config) {    
+    SPDLOG_DEBUG("Consumer Thread Created - Task Started - Job ID: {}", context->id);
+    
     // Pass remaining lines to next file in case batch.line_count > lines_needed
     std::string leftover_data;
     uint32_t leftover_lines = 0;
@@ -192,9 +196,16 @@ void GeneratorService::ConsumerTask(std::shared_ptr<JobContext> context, JobConf
             JobTeardown(context);
             break;
         }
-        
-        if (queue_exhausted) break;
+
+        SPDLOG_DEBUG("Consumer Thread - Job ID: {} - Files written: {}", context->id, context->files_fully_written.load());
+
+        if (queue_exhausted) {
+            SPDLOG_DEBUG("Consumer - Queue Exhausted");
+            break;
+        } 
     }
+
+    SPDLOG_DEBUG("Consumer Thread - Shutdown - Job ID: {} - Files written: {}", context->id, context->files_fully_written.load());
 }
 
 size_t GeneratorService::FindNthNewLine(std::string_view data, size_t n) {
@@ -222,9 +233,13 @@ std::string GeneratorService::CreateFilename(std::string_view dir, const uint32_
 std::optional<std::ofstream> GeneratorService::OpenLogFile(const std::string& filename) {
     std::ofstream file(filename, std::ios::out | std::ios::binary);
     
-    if (!file.is_open())
+    if (!file.is_open()) {
+        SPDLOG_DEBUG("Could not open the file: {}", filename);
         return std::nullopt;
+    }
 
+    SPDLOG_TRACE("File created: {}", filename);
+    
     return file;
 }
 

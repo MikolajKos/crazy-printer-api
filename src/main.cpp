@@ -4,8 +4,13 @@
 
 #include "httplib.h"
 
+#include <spdlog/spdlog.h>
+
 int main() {
     LoggerSetup::Init();
+    LoggerSetup::PrintWelcomeMessage();
+
+    spdlog::info("Waking up the printer...");
 
     httplib::Server svr;
     GeneratorService service;
@@ -13,7 +18,12 @@ int main() {
 
     controller.RegisterRoutes(svr);
 
-    svr.listen("0.0.0.0", 8080);
-    
+    std::string host = "0.0.0.0";
+    int port = 8080;
+
+    spdlog::info("Listening on host: {} port: {}", host, port);
+
+    svr.listen(host, port);
+
     return 0;
 }

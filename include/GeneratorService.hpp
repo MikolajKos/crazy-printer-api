@@ -50,15 +50,13 @@ struct JobContext {
     
     std::string status;
 
-    std::atomic<uint32_t> active_producers{0};
-
     std::atomic<uint32_t> next_file_id{0};
     std::atomic<uint32_t> files_fully_written{0};
     std::atomic<uint32_t> lines_produced{0};
 
     explicit JobContext(uint64_t job_id)
-        :id(job_id), 
-        start_time(std::chrono::steady_clock::now()) {}
+        : start_time(std::chrono::steady_clock::now()),
+        id(job_id) {}
 
     void MarkAsFinished() {
         auto end_time = std::chrono::steady_clock::now();

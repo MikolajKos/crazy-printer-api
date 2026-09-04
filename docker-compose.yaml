@@ -1,6 +1,11 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # Will get BUILD_TYPE variable from terminal (Release by default)
+        - BUILD_TYPE=${BUILD_TYPE:-Release}
+        - SAN_TYPE=${SAN_TYPE:-}
     image: crazy-printer
     ports:
       - "8080:8080"
